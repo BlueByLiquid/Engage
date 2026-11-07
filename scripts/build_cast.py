@@ -22,12 +22,24 @@ def main():
     show=get('https://api.tvmaze.com/singlesearch/shows?q='+urllib.parse.quote('Star Trek: The Next Generation'))
     eps=get(f"https://api.tvmaze.com/shows/{show['id']}/episodes")
     lookup={(e['season'],norm(e['name'])):e for e in eps if e.get('number') is not None}
+    by_season={}
+    for e in eps:
+        if e.get('number') is not None:
+            by_season.setdefault(e['season'],[]).append(e)
     result={}
     missing=[]
     failures=[]
     for item in guide:
         key=f"{item['s']}-{item['e']}"
         ep=lookup.get((item['s'],norm(item['title'])))
+        if not ep:
+            # Streaming guides sometimes split two-part episodes or use different punctuation.
+            candidates=by_season.get(item['s'],[])
+            expected=item['e']
+            if expected<=len(candidates):
+                candidate=candidates[expected-1]
+                if norm(item['title']).startswith(norm(candidate['name'])) or norm(candidate['name']).startswith(norm(item['title'])):
+                    ep=candidate
         if not ep:
             missing.append(key+' '+item['title'])
             result[key]=[]
