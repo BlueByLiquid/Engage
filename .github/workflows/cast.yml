@@ -10,6 +10,9 @@ permissions:
 jobs:
   cast:
     runs-on: ubuntu-latest
+    concurrency:
+      group: engage-cast-index
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -21,8 +24,23 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add cast.json
-          if ! git diff --cached --quiet; then
+          # Preserve the generated file while bringing the checkout up to date.
+          cp cast.json "$RUNNER_TEMP/engage-cast.json"
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+            git reset --hard origin/main
+            cp "$RUNNER_TEMP/engage-cast.json" cast.json
+            git add cast.json
+            if git diff --cached --quiet; then
+              echo "Cast index already up to date."
+              exit 0
+            fi
             git commit -m "Build complete TNG guest cast index"
-            git push
-          fi
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "Main changed during publish; retrying ($attempt/5)"
+            sleep 3
+          done
+          echo "Unable to publish after five non-force retries."
+          exit 1
