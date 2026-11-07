@@ -24,13 +24,19 @@ def main():
     lookup={(e['season'],norm(e['name'])):e for e in eps if e.get('number') is not None}
     result={}
     missing=[]
+    failures=[]
     for item in guide:
         key=f"{item['s']}-{item['e']}"
         ep=lookup.get((item['s'],norm(item['title'])))
         if not ep:
             missing.append(key+' '+item['title'])
+            result[key]=[]
             continue
-        raw=get(f"https://api.tvmaze.com/episodes/{ep['id']}/guestcast")
+        try:
+            raw=get(f"https://api.tvmaze.com/episodes/{ep['id']}/guestcast")
+        except Exception as exc:
+            failures.append(key+' '+str(exc))
+            raw=[]
         credits=[]
         for c in raw:
             person=(c.get('person') or {}).get('name')
@@ -40,7 +46,9 @@ def main():
         result[key]=credits
         time.sleep(0.6)
     if missing:
-        raise RuntimeError('Unmatched episodes: '+', '.join(missing))
-    (ROOT/'cast.json').write_text(json.dumps({'source':'TVmaze','kind':'episode-specific guest credits','episodes':result},ensure_ascii=False,separators=(',',':'))+'\n')
-    print(f"Cached guest cast for {len(result)} episodes")
+        print('WARNING: Unmatched titles:', ', '.join(missing))
+    if failures:
+        print('WARNING: Failed guest credits:', ', '.join(failures))
+    (ROOT/'cast.json').write_text(json.dumps({'source':'TVmaze','kind':'episode-specific guest credits','episodes':result,'unmatched':missing,'failures':failures},ensure_ascii=False,separators=(',',':'))+'\n')
+    print(f"Cached guest cast for {len(result)} episodes; unmatched={len(missing)}, failures={len(failures)}")
 if __name__=='__main__':main()
